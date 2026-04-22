@@ -98,7 +98,7 @@ sed 's|\${CLAUDE_PLUGIN_DIR}|'"$(pwd)/git_learn"'|g' \
 ```
 
 ## Usage
-
+To get started, launch Claude Code inside your Git repository and run the following command:
 ```
 /git-learn [author] [n|all]
 ```
