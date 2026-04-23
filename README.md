@@ -17,7 +17,7 @@
 ╰──────────────────────────────────────────────────────────────────────────────────╯
 ```
 
-Fetches GitHub commit history for an author with PR review thread comments (resolved/open status, file, line, threaded replies). Derives generic code guidelines from review comments and writes them into a lightweight `CLAUDE.local.md` + linked `.md` files under `.git_learn/`.
+Fetches GitHub commit history for an author with PR review thread comments (resolved/open status, file, line, threaded replies). Derives generic code guidelines from review comments and writes them into a lightweight `CLAUDE.local.md` + linked `.md` files under `.git-learn/`.
 
 ## How it works
 
@@ -56,8 +56,8 @@ Fetches GitHub commit history for an author with PR review thread comments (reso
           ┌────────────────────────▼──────────────────────────┐
           │                   Applied                          │
           │                                                    │
-          │  .git_learn/error-handling.md  ← new guidelines   │
-          │  .git_learn/concurrency.md     ← new guidelines   │
+          │  .git-learn/error-handling.md  ← new guidelines   │
+          │  .git-learn/concurrency.md     ← new guidelines   │
           │                                                    │
           │  CLAUDE.local.md  ← index with aggregated tags    │
           │  .gitignore       ← entries verified               │
@@ -72,18 +72,18 @@ Claude Code has two distinct mechanisms:
 | Location | Purpose | Invocation |
 | --- | --- | --- |
 | `~/.claude/commands/git-learn.md` | Registers `/git-learn` as a slash command the **user** types | `/git-learn [args]` |
-| `~/.claude/skills/git_learn/git-learn.md` | Loaded **contextually by Claude** when the task matches the description — never directly invocable | Automatic |
+| `~/.claude/skills/git-learn/git-learn.md` | Loaded **contextually by Claude** when the task matches the description — never directly invocable | Automatic |
 
 This skill is installed only under `~/.claude/commands/` as a flat `.md` file. The `skills/` directory is intentionally not used to avoid a duplicate entry.
 
 ## Install
 
-Run from the directory containing the `git_learn` folder:
+Run from the directory containing the `git-learn` folder:
 
 ```bash
 mkdir -p ~/.claude/commands
-sed 's|\${CLAUDE_PLUGIN_DIR}|'"$(pwd)/git_learn"'|g' \
-  git_learn/git-learn.md > ~/.claude/commands/git-learn.md
+sed 's|\${CLAUDE_PLUGIN_DIR}|'"$(pwd)/git-learn"'|g' \
+  git-learn/git-learn.md > ~/.claude/commands/git-learn.md
 ```
 
 This generates a flat command file pointing directly at the scripts in this directory — no files are copied. Restart Claude Code after installing.
@@ -93,8 +93,8 @@ This generates a flat command file pointing directly at the scripts in this dire
 Any time `git-learn.md` is edited, re-run the same command from the same directory:
 
 ```bash
-sed 's|\${CLAUDE_PLUGIN_DIR}|'"$(pwd)/git_learn"'|g' \
-  git_learn/git-learn.md > ~/.claude/commands/git-learn.md
+sed 's|\${CLAUDE_PLUGIN_DIR}|'"$(pwd)/git-learn"'|g' \
+  git-learn/git-learn.md > ~/.claude/commands/git-learn.md
 ```
 
 ## Usage
