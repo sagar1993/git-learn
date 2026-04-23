@@ -28,6 +28,8 @@ Usage:
         --author all --token <token> --last 0
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -182,6 +184,39 @@ def serialize_thread(thread: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Open PR commit fetching
+# ---------------------------------------------------------------------------
+
+def fetch_open_pr_commits(owner: str, repo: str, author: str, token: str) -> list[dict]:
+    """Return commits from all open PRs authored by `author`, tagged with _open_pr."""
+    prs_url = (
+        f"https://api.github.com/repos/{owner}/{repo}/pulls"
+        f"?state=open&creator={urllib.parse.quote(author)}&per_page=100"
+    )
+    prs = github_get(prs_url, token)
+    if not isinstance(prs, list):
+        return []
+
+    seen: set[str] = set()
+    commits: list[dict] = []
+    for pr in prs:
+        pr_number = pr["number"]
+        pr_title = pr.get("title", "")
+        commits_url = (
+            f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}/commits"
+            f"?per_page=100"
+        )
+        for entry in github_get(commits_url, token):
+            sha = entry["sha"]
+            if sha not in seen:
+                seen.add(sha)
+                entry["_open_pr"] = pr_number
+                entry["_open_pr_title"] = pr_title
+                commits.append(entry)
+    return commits
+
+
+# ---------------------------------------------------------------------------
 # Data collection
 # ---------------------------------------------------------------------------
 
@@ -190,10 +225,14 @@ def collect_commit_data(entry: dict, owner: str, repo: str, token: str) -> dict:
     message = entry["commit"]["message"].splitlines()[0]
     raw_threads = get_pr_review_threads(owner, repo, sha, token)
     threads = [t for t in (serialize_thread(th) for th in raw_threads) if t]
-    return {
+    result: dict = {
         "message": message,
         "comment_threads": threads,
     }
+    if "_open_pr" in entry:
+        result["open_pr"] = entry["_open_pr"]
+        result["open_pr_title"] = entry["_open_pr_title"]
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +305,8 @@ def print_comment(cm: dict, indent: int = 4) -> None:
 
 def print_commit(sha: str, data: dict) -> None:
     sep()
-    print(f"  Commit  : {sha[:7]}  ({sha})")
+    pr_badge = f"  [open PR #{data['open_pr']}: {data['open_pr_title']}]" if data.get("open_pr") else ""
+    print(f"  Commit  : {sha[:7]}  ({sha}){pr_badge}")
     print(f"  Message : {data['message']}")
     threads = data["comment_threads"]
     if threads:
@@ -282,7 +322,8 @@ def print_commit(sha: str, data: dict) -> None:
 def print_skipped(sha: str, entry: dict, seen_file: str) -> None:
     sep()
     message = entry["commit"]["message"].splitlines()[0]
-    print(f"  Commit  : {sha[:7]}  ({sha})  [skipped — already in {seen_file}]")
+    pr_badge = f"  [open PR #{entry['_open_pr']}]" if "_open_pr" in entry else ""
+    print(f"  Commit  : {sha[:7]}  ({sha})  [skipped — already in {seen_file}]{pr_badge}")
     print(f"  Message : {message}")
 
 
@@ -322,22 +363,35 @@ def run(
     author_label = author if author else "all authors"
     print(f"\nFetching {scope_label} commit(s) by '{author_label}' in {owner}/{repo} …\n")
 
+    # Fetch merged commits from the default branch
     base_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=100"
     if author:
         base_url += f"&author={urllib.parse.quote(author)}"
-    commits: list = []
+    merged_commits: list = []
     page = 1
     while True:
         batch = github_get(f"{base_url}&page={page}", token)
         if not batch:
             break
-        commits.extend(batch)
-        if last and len(commits) >= last:
-            commits = commits[:last]
+        merged_commits.extend(batch)
+        if last and len(merged_commits) >= last:
+            merged_commits = merged_commits[:last]
             break
         if len(batch) < 100:
             break
         page += 1
+
+    # Fetch commits from open PRs (only when a specific author is given)
+    open_pr_commits: list = []
+    if author:
+        print(f"Fetching open PR commits for '{author}' …\n")
+        open_pr_commits = fetch_open_pr_commits(owner, repo, author, token)
+
+    # Merge: open PR commits first, then merged commits; deduplicate by SHA
+    merged_shas = {e["sha"] for e in open_pr_commits}
+    commits = open_pr_commits + [e for e in merged_commits if e["sha"] not in merged_shas]
+    if last:
+        commits = commits[:last]
 
     if not commits:
         if author:
@@ -355,7 +409,11 @@ def run(
     seen_shas = load_seen_shas(seen_file)
 
     sep("═")
+    open_pr_count = sum(1 for e in commits if "_open_pr" in e)
+    merged_count = len(commits) - open_pr_count
     print(f"  {len(commits)} commit(s) ({scope_label})  ·  author: {author_label}  ·  {owner}/{repo}")
+    if open_pr_count:
+        print(f"  {merged_count} merged  ·  {open_pr_count} from open PR(s)")
     print(f"  {len(seen_shas)} SHA(s) already in {seen_file}")
     sep("═")
 
