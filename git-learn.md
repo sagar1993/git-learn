@@ -98,21 +98,23 @@ python3 ${CLAUDE_PLUGIN_DIR}/scripts/get_commit_history.py \
   --author "<RESOLVED_AUTHOR>" \
   --token "$GITHUB_TOKEN"
 
-# All users, with a limit — omit --author entirely
+# All users, with a limit — pass --author all
 python3 ${CLAUDE_PLUGIN_DIR}/scripts/get_commit_history.py \
   --owner <OWNER> \
   --repo <REPO> \
+  --author all \
   --token "$GITHUB_TOKEN" \
   --last <N>
 
-# All users, fetch all commits — omit both --author and --last
+# All users, fetch all commits — pass --author all, omit --last
 python3 ${CLAUDE_PLUGIN_DIR}/scripts/get_commit_history.py \
   --owner <OWNER> \
   --repo <REPO> \
+  --author all \
   --token "$GITHUB_TOKEN"
 ```
 
-Omit `--last` entirely when the user requests all commits. Omit `--author` entirely when `RESOLVED_AUTHOR` is `__ALL__` — the script will then return commits from all contributors. The script creates `.git_learn/` if absent, then writes:
+Omit `--last` entirely when the user requests all commits. Pass `--author all` when `RESOLVED_AUTHOR` is `__ALL__` — the script will then return commits from all contributors. The script creates `.git_learn/` if absent, then writes:
 - `.git_learn/commit_seen.txt` — appends new SHAs; persists across sessions.
 - `.git_learn/results_<YYYYMMDD_HHMMSS>_<pid>.json` — new commits only; unique per session so parallel runs never collide.
 
@@ -201,17 +203,28 @@ Only include guidelines that are **non-obvious from reading the code alone** —
 - Design decisions that only make sense with broader context (e.g. why a particular abstraction is preferred)
 - Patterns that look correct but have hidden runtime consequences
 
+**Guidelines must be generic and universally applicable**
+
+Every guideline written to a `.md` file must be phrased as a rule that applies across the entire codebase — not tied to a specific file, function, class, or one-off situation. Before writing a guideline, ask: *"Would this rule help Claude avoid a mistake in a completely different file or context?"* If the answer is no, skip it.
+
+Concrete tests for generality — a guideline **must pass all three**:
+1. The rule can be stated without naming any specific file, module, function, or variable from the codebase.
+2. The rule would prevent the same class of mistake if encountered in a different part of the codebase.
+3. A developer unfamiliar with the specific PR would find the rule useful on their first day.
+
 **Explicitly skip** a thread if it falls into any of these categories:
 - Purely stylistic nitpicks already covered by a formatter or linter
 - One-off fixes specific to a single instance with no generalisable lesson
+- Comments that describe *what to fix in this particular file* rather than *how to write code correctly in general*
 - Praise, questions, or clarification requests with no actionable rule
 - Comments that duplicate an existing guideline already in the `.git_learn/` files
 - Trivial typo or whitespace corrections
+- Comments posted by AI copilots (e.g. GitHub Copilot, Cursor, CodeRabbit, or any bot reviewer), **unless** there is a clear positive signal that the author read and incorporated the suggestion — such as the author explicitly agreeing in a reply, the thread being marked resolved by the author, or a follow-up commit that visibly addresses the point. An AI-generated comment with no human response is not evidence of a real coding standard; treat it as noise.
 
 For each guideline, produce:
-- **title** — short imperative phrase (e.g. "Release locks in exception paths")
-- **body** — 1–3 sentences explaining the rule and why it matters, including the non-obvious reason
-- **code_example** — include only when a code snippet is absolutely necessary to make the guideline actionable; perform a file lookup only at that point; omit entirely when the rule is clearly understandable in prose (naming conventions, design principles, workflow rules)
+- **title** — short imperative phrase with no file or function references (e.g. "Release locks in exception paths")
+- **body** — 1–3 sentences explaining the rule and why it matters, including the non-obvious reason. Must be written in generic terms — no file names, function names, variable names, or references to the specific PR or instance that surfaced the issue.
+- **code_example** — include only when a code snippet is absolutely necessary to make the guideline actionable; perform a file lookup only at that point; omit entirely when the rule is clearly understandable in prose (naming conventions, design principles, workflow rules). Any snippet must use placeholder names, not names copied verbatim from the original file.
 
 Build the guidelines JSON spec in this shape:
 

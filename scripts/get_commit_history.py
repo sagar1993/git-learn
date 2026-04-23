@@ -19,9 +19,13 @@ Usage:
     python3 get_commit_history.py --owner <owner> --repo <repo> \
         --author <github-username> --token <token> --last 50
 
-    # All commits
+    # All commits from all authors (use the sentinel value "all")
     python3 get_commit_history.py --owner <owner> --repo <repo> \
-        --token <token> --last 0
+        --author all --token <token>
+
+    # All commits from all authors, no limit
+    python3 get_commit_history.py --owner <owner> --repo <repo> \
+        --author all --token <token> --last 0
 """
 
 import argparse
@@ -308,23 +312,23 @@ def resolve_author() -> str:
 def run(
     owner: str,
     repo: str,
-    author: str,
+    author: str | None,
     token: str,
     last: int | None,
     seen_file: str,
     results_dir: str,
 ) -> None:
     scope_label = f"last {last}" if last else "all"
-    print(f"\nFetching {scope_label} commit(s) by '{author}' in {owner}/{repo} …\n")
+    author_label = author if author else "all authors"
+    print(f"\nFetching {scope_label} commit(s) by '{author_label}' in {owner}/{repo} …\n")
 
-    url = (
-        f"https://api.github.com/repos/{owner}/{repo}/commits"
-        f"?per_page=100&author={urllib.parse.quote(author)}"
-    )
+    base_url = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=100"
+    if author:
+        base_url += f"&author={urllib.parse.quote(author)}"
     commits: list = []
     page = 1
     while True:
-        batch = github_get(f"{url}&page={page}", token)
+        batch = github_get(f"{base_url}&page={page}", token)
         if not batch:
             break
         commits.extend(batch)
@@ -336,10 +340,13 @@ def run(
         page += 1
 
     if not commits:
-        print(f"No commits found for author '{author}' in {owner}/{repo}.")
-        print("\nTips:")
-        print("  • Use the exact GitHub username (e.g. octocat), not a display name.")
-        print("  • Or use the commit email address (e.g. octocat@github.com).")
+        if author:
+            print(f"No commits found for author '{author}' in {owner}/{repo}.")
+            print("\nTips:")
+            print("  • Use the exact GitHub username (e.g. octocat), not a display name.")
+            print("  • Or use the commit email address (e.g. octocat@github.com).")
+        else:
+            print(f"No commits found in {owner}/{repo}.")
         return
 
     os.makedirs(os.path.dirname(seen_file) or ".", exist_ok=True)
@@ -348,7 +355,7 @@ def run(
     seen_shas = load_seen_shas(seen_file)
 
     sep("═")
-    print(f"  {len(commits)} commit(s) ({scope_label})  ·  author: {author}  ·  {owner}/{repo}")
+    print(f"  {len(commits)} commit(s) ({scope_label})  ·  author: {author_label}  ·  {owner}/{repo}")
     print(f"  {len(seen_shas)} SHA(s) already in {seen_file}")
     sep("═")
 
@@ -425,13 +432,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    author = args.author or resolve_author()
-    if not author:
-        print(
-            "ERROR: Could not determine author. Pass --author <github-username-or-email>.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    if args.author and args.author.lower() == "all":
+        author = None  # all-authors mode: no author filter
+    else:
+        author = args.author or resolve_author()
+        if not author:
+            print(
+                "ERROR: Could not determine author. "
+                "Pass --author <github-username-or-email> or --author all for all authors.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     last = None if args.last == 0 else args.last
 
